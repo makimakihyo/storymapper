@@ -1,6 +1,15 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+// 未認証でも通すパス(/signin と /auth/* と /signout)
+const PUBLIC_PATH_PREFIXES = ['/signin', '/auth', '/signout']
+
+function isPublicPath(pathname: string): boolean {
+  return PUBLIC_PATH_PREFIXES.some(
+    (p) => pathname === p || pathname.startsWith(p + '/')
+  )
+}
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
@@ -25,8 +34,18 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
-  // IMPORTANT: getClaims を使う(getSession は server 側で信頼不可)
-  await supabase.auth.getClaims()
+  // IMPORTANT: getClaims はトークンリフレッシュも兼ねるため必ず呼ぶ
+  const { data } = await supabase.auth.getClaims()
+  const isAuthenticated = !!data?.claims
+
+  const { pathname } = request.nextUrl
+
+  if (!isAuthenticated && !isPublicPath(pathname)) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/signin'
+    url.searchParams.set('next', pathname) // 戻り先を保持
+    return NextResponse.redirect(url)
+  }
 
   return supabaseResponse
 }
