@@ -8,12 +8,13 @@ export async function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * Feel free to modify this pattern to include more paths.
+     * 以下を除く全パスで proxy を実行:
+     * - api ルート
+     * - _next/static (静的ファイル)
+     * - _next/image (画像最適化)
+     * - favicon.ico, robots.txt, sitemap.xml (Metadata Files)
+     * - 拡張子付きファイル全般 (画像/フォント等)
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|.*\\..*).*)',
   ],
 }
