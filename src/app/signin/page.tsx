@@ -1,13 +1,30 @@
-import type { Metadata } from 'next'
+import type { Metadata } from 'next';
 
-import { SigninForm } from './signin-form'
+import { SigninForm } from './signin-form';
 
 export const metadata: Metadata = {
   title: 'サインイン | StoryMapper',
   description: 'StoryMapper にサインインします。',
+};
+
+type SearchParams = Promise<{ next?: string | string[] }>;
+
+function sanitizeNext(value: string | string[] | undefined): string {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (!raw) return '/';
+  if (!raw.startsWith('/')) return '/';
+  if (raw.startsWith('//')) return '/';
+  return raw;
 }
 
-export default function SigninPage() {
+export default async function SigninPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  const params = await searchParams;
+  const next = sanitizeNext(params.next);
+
   return (
     <main className="flex flex-1 items-center justify-center bg-zinc-50 px-4 py-16 dark:bg-black">
       <div className="w-full max-w-sm space-y-6 rounded-lg border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
@@ -19,8 +36,8 @@ export default function SigninPage() {
             メールアドレスを入力すると、サインイン用のリンクを送信します。
           </p>
         </header>
-        <SigninForm />
+        <SigninForm next={next} />
       </div>
     </main>
-  )
+  );
 }
