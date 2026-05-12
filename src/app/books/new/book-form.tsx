@@ -1,17 +1,23 @@
 'use client';
 
+import { useState, useTransition } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { bookFormSchema, type BookFormInput } from '@/lib/schemas/book';
+import { createBookAction } from './actions';
 
 export function BookForm() {
+  const [isPending, startTransition] = useTransition();
+  const [serverError, setServerError] = useState<string | null>(null);
+
   const {
     register,
     handleSubmit,
-    formState: { errors, isSubmitting },
+    setError,
+    formState: { errors },
   } = useForm<BookFormInput>({
     resolver: zodResolver(bookFormSchema),
     defaultValues: {
@@ -21,10 +27,26 @@ export function BookForm() {
     },
   });
 
-  // Server Action は明日(5/12)に実装。今日はバリデーション動作確認まで
-  const onSubmit = async (data: BookFormInput) => {
-    console.log('submit', data);
-    // TODO: Day 4 で createBook Server Action を呼ぶ
+  const onSubmit = (data: BookFormInput) => {
+    setServerError(null);
+    startTransition(async () => {
+      const result = await createBookAction(data);
+      // 成功時は Server Action 側で redirect されるのでここに戻ってこない
+      if (!result) return;
+
+      if (result.kind === 'fieldErrors') {
+        for (const [field, message] of Object.entries(result.fieldErrors)) {
+          if (message) {
+            setError(field as keyof BookFormInput, {
+              type: 'server',
+              message,
+            });
+          }
+        }
+        return;
+      }
+      setServerError(result.message);
+    });
   };
 
   return (
@@ -56,7 +78,7 @@ export function BookForm() {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="first_scene_name">最初のシーン名（任意）</Label>
+        <Label htmlFor="first_scene_name">最初のシーン名(任意)</Label>
         <Input
           id="first_scene_name"
           placeholder="例: プロローグ"
@@ -73,8 +95,14 @@ export function BookForm() {
         )}
       </div>
 
-      <Button type="submit" disabled={isSubmitting}>
-        登録する
+      {serverError && (
+        <p role="alert" className="text-sm text-destructive">
+          {serverError}
+        </p>
+      )}
+
+      <Button type="submit" disabled={isPending}>
+        {isPending ? '登録中…' : '登録する'}
       </Button>
     </form>
   );
