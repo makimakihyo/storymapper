@@ -10,7 +10,11 @@ import { signInAction, type SignInState } from './actions'
 
 const INITIAL_STATE: SignInState = { status: 'idle' }
 
-export function SigninForm() {
+type SigninFormProps = {
+  next?: string
+}
+
+export function SigninForm({ next = '/' }: SigninFormProps) {
   const [state, formAction, pending] = useActionState(signInAction, INITIAL_STATE)
 
   if (state.status === 'sent') {
@@ -30,6 +34,7 @@ export function SigninForm() {
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
+      <input type="hidden" name="next" value={next} />
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="email">メールアドレス</Label>
         <Input
