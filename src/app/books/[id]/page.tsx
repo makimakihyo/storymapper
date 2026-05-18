@@ -1,6 +1,7 @@
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
+import { progressScene } from './actions';
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -125,7 +126,20 @@ export default async function BookPage({ params }: Props) {
         </div>
       </section>
 
-      {/* タスク #7 でシーン進行ボタンを追加予定 */}
+      {/* シーン進行ボタン */}
+      <section className="mt-6">
+        <form action={progressScene.bind(null, book.id)}>
+          <button
+           type="submit"
+           className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 active:bg-blue-800"
+        >
+           シーン進行 →
+        </button>
+      </form>
+    <p className="mt-2 text-xs text-gray-500">
+      次の既存シーンがあれば移動、無ければ新規シーンを作成します
+    </p>
+  </section>
     </main>
   );
 }
