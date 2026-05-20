@@ -2,6 +2,8 @@ import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { progressScene } from './actions';
+import { MemoForm } from './memo-form';      // ← 追加
+import { MemoList } from './memo-list';      // ← 追加
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -115,6 +117,23 @@ export default async function BookPage({ params }: Props) {
           </div>
         )}
       </section>
+
+      {/* メモ・ブックマーク */}
+      {progress?.current_scene_id && (
+        <section className="mt-6">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-lg font-medium">メモ・ブックマーク</h2>
+            <MemoForm
+              bookId={book.id}
+              currentSceneId={progress.current_scene_id}
+            />
+          </div>
+          <MemoList
+            bookId={book.id}
+            currentSceneId={progress.current_scene_id}
+          />
+        </section>
+      )}
 
       {/* POVキャラ・場所 (α版は枠だけ、空表示OK) */}
       <section className="mt-4 rounded border p-4 text-sm text-gray-500">
