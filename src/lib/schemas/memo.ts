@@ -7,7 +7,7 @@ export const createMemoSchema = z.object({
     .trim()
     .min(1, '本文を入力してください')
     .max(2000, '2000文字以内で入力してください'),
-  is_bookmark: z.boolean().default(false),
+  is_bookmark: z.boolean()
 })
 
 export type CreateMemoInput = z.infer<typeof createMemoSchema>
