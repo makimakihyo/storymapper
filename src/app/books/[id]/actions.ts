@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { incrementOrderKey } from '@/lib/scenes/order-key';
+import { createMemoSchema } from '@/lib/schemas/memo';
 
 export async function progressScene(bookId: string): Promise<void> {
   const supabase = await createClient();
@@ -78,5 +79,68 @@ export async function progressScene(bookId: string): Promise<void> {
   }
 
   // 6. ページ再描画
+  revalidatePath(`/books/${bookId}`);
+}
+
+// =====================================================================
+// メモ・ブックマーク作成・削除
+// =====================================================================
+
+export type MemoActionFailure = { error: string };
+
+export async function createMemo(
+  bookId: string,
+  formData: FormData,
+): Promise<MemoActionFailure | void> {
+  const parsed = createMemoSchema.safeParse({
+    scene_id: formData.get('scene_id'),
+    body: formData.get('body'),
+    is_bookmark: formData.get('is_bookmark') === 'on',
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues.map((i) => i.message).join(' / ') };
+  }
+
+  const supabase = await createClient();
+
+  // 認証確認(progressScene と同パターン、手前で弾く)
+  const { data: claimsData } = await supabase.auth.getClaims();
+  if (!claimsData?.claims) {
+    return { error: 'Unauthorized' };
+  }
+
+  const { error } = await supabase.from('memos').insert({
+    scene_id: parsed.data.scene_id,
+    body: parsed.data.body,
+    is_bookmark: parsed.data.is_bookmark,
+    // is_flashback_ref / refers_to_scene_id / bookmark_note は DEFAULT/NULL のまま
+  });
+
+  if (error) {
+    return { error: `メモ作成に失敗しました: ${error.message}` };
+  }
+
+  revalidatePath(`/books/${bookId}`);
+}
+
+export async function deleteMemo(
+  bookId: string,
+  memoId: string,
+): Promise<MemoActionFailure | void> {
+  const supabase = await createClient();
+
+  // 認証確認
+  const { data: claimsData } = await supabase.auth.getClaims();
+  if (!claimsData?.claims) {
+    return { error: 'Unauthorized' };
+  }
+
+  const { error } = await supabase.from('memos').delete().eq('id', memoId);
+
+  if (error) {
+    return { error: `メモ削除に失敗しました: ${error.message}` };
+  }
+
   revalidatePath(`/books/${bookId}`);
 }
