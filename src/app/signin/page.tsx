@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 
 import { SigninForm } from './signin-form';
+import { sanitizeNext } from '@/lib/auth/safe-next';
 
 export const metadata: Metadata = {
   title: 'サインイン | StoryMapper',
@@ -8,14 +9,6 @@ export const metadata: Metadata = {
 };
 
 type SearchParams = Promise<{ next?: string | string[] }>;
-
-function sanitizeNext(value: string | string[] | undefined): string {
-  const raw = Array.isArray(value) ? value[0] : value;
-  if (!raw) return '/';
-  if (!raw.startsWith('/')) return '/';
-  if (raw.startsWith('//')) return '/';
-  return raw;
-}
 
 export default async function SigninPage({
   searchParams,
