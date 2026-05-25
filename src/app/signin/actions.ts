@@ -4,6 +4,7 @@ import { headers } from 'next/headers';
 import { z } from 'zod';
 
 import { createClient } from '@/lib/supabase/server';
+import { sanitizeNext } from '@/lib/auth/safe-next';
 
 const SignInSchema = z.object({
   email: z
@@ -29,13 +30,6 @@ async function resolveOrigin(): Promise<string> {
     headerList.get('x-forwarded-proto') ??
     (host.startsWith('localhost') ? 'http' : 'https');
   return `${proto}://${host}`;
-}
-
-function sanitizeNext(value: string | undefined): string {
-  if (!value) return '/';
-  if (!value.startsWith('/')) return '/';
-  if (value.startsWith('//')) return '/';
-  return value;
 }
 
 export async function signInAction(

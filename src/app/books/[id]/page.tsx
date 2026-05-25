@@ -1,9 +1,11 @@
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
-import { progressScene } from './actions';
 import { MemoForm } from './memo-form';      // ← 追加
 import { MemoList } from './memo-list';      // ← 追加
+import { progressScene, regressScene } from './actions';   // regressScene を追加
+import { SubmitButton } from './submit-button';            // 新規
+
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -49,6 +51,22 @@ export default async function BookPage({ params }: Props) {
     (s) => s.id === progress?.current_scene_id
   ) ?? -1;
   const currentScenePosition = currentSceneIndex >= 0 ? currentSceneIndex + 1 : 0;
+
+// 現在シーンのメモ有無(案1: 空シーンからの新規作成を弾く)
+  let currentSceneHasMemo = false;
+  if (progress?.current_scene_id) {
+    const { count } = await supabase
+      .from('memos')
+      .select('id', { count: 'exact', head: true })
+      .eq('scene_id', progress.current_scene_id);
+    currentSceneHasMemo = (count ?? 0) > 0;
+  }
+
+  // 進行/後退の可否
+  const hasExistingNextScene =
+    currentSceneIndex >= 0 && currentSceneIndex < totalScenes - 1;
+  const canRegress = currentSceneIndex > 0;
+  const canProgress = currentSceneHasMemo || hasExistingNextScene;
 
   // 5. 現在シーンの chapter ラベル取得
   let chapterLabelName: string | null = null;
@@ -124,6 +142,7 @@ export default async function BookPage({ params }: Props) {
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-lg font-medium">メモ・ブックマーク</h2>
             <MemoForm
+              key={progress.current_scene_id}
               bookId={book.id}
               currentSceneId={progress.current_scene_id}
             />
@@ -145,20 +164,34 @@ export default async function BookPage({ params }: Props) {
         </div>
       </section>
 
-      {/* シーン進行ボタン */}
+      {/* シーン移動(後退 / 進行) */}
       <section className="mt-6">
-        <form action={progressScene.bind(null, book.id)}>
-          <button
-           type="submit"
-           className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 active:bg-blue-800"
-        >
-           シーン進行 →
-        </button>
-      </form>
-    <p className="mt-2 text-xs text-gray-500">
-      次の既存シーンがあれば移動、無ければ新規シーンを作成します
-    </p>
-  </section>
+        <div className="flex items-center gap-3">
+          <form action={regressScene.bind(null, book.id)}>
+            <SubmitButton
+              disabled={!canRegress}
+              className="rounded border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              ← 戻る
+            </SubmitButton>
+          </form>
+
+          <form action={progressScene.bind(null, book.id)}>
+            <SubmitButton
+              disabled={!canProgress}
+              className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 active:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              シーン進行 →
+            </SubmitButton>
+          </form>
+        </div>
+
+        <p className="mt-2 text-xs text-gray-500">
+          {canProgress
+            ? '次の既存シーンがあれば移動、無ければ新規シーンを作成します'
+            : 'このシーンにメモを1件追加すると次へ進めます'}
+        </p>
+      </section>
     </main>
   );
 }
