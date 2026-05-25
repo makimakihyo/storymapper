@@ -52,6 +52,18 @@ export async function progressScene(bookId: string): Promise<void> {
     nextSceneId = nextScene.id;
   } else {
     // 4b. 既存シーンが無い → 新規 INSERT(label 無し、自動連番)
+    //     現在シーンにメモが1件も無ければ新規作成しない(空シーンの量産防止)。
+    //     クライアントでも進行ボタンを無効化済みなので、ここは安全網。
+    const { count: memoCount } = await supabase
+      .from('memos')
+      .select('id', { count: 'exact', head: true })
+      .eq('scene_id', progress.current_scene_id);
+
+    if (!memoCount || memoCount < 1) {
+      return; // no-op: 空シーンからの新規作成は不可
+    }
+
+    // 新規 INSERT(label 無し、自動連番)
     const newOrderKey = incrementOrderKey(currentScene.order_key);
     const { data: created, error: insertError } = await supabase
       .from('scenes')
@@ -61,6 +73,7 @@ export async function progressScene(bookId: string): Promise<void> {
       })
       .select('id')
       .single();
+
 
     if (insertError || !created) {
       throw new Error(`Failed to create scene: ${insertError?.message}`);
@@ -79,6 +92,66 @@ export async function progressScene(bookId: string): Promise<void> {
   }
 
   // 6. ページ再描画
+  revalidatePath(`/books/${bookId}`);
+}
+
+export async function regressScene(bookId: string): Promise<void> {
+  const supabase = await createClient();
+
+  // 1. 認証確認
+  const { data: claimsData } = await supabase.auth.getClaims();
+  if (!claimsData?.claims) {
+    throw new Error('Unauthorized');
+  }
+
+  // 2. 現在の reading_progress
+  const { data: progress, error: progressError } = await supabase
+    .from('reading_progress')
+    .select('current_scene_id')
+    .eq('book_id', bookId)
+    .single();
+
+  if (progressError || !progress?.current_scene_id) {
+    throw new Error(`Reading progress not found: ${progressError?.message}`);
+  }
+
+  // 3. 現在シーンの order_key
+  const { data: currentScene, error: currentSceneError } = await supabase
+    .from('scenes')
+    .select('order_key')
+    .eq('id', progress.current_scene_id)
+    .single();
+
+  if (currentSceneError || !currentScene) {
+    throw new Error(`Current scene not found: ${currentSceneError?.message}`);
+  }
+
+  // 4. 1つ前の既存シーン(order_key で手前の最大)
+  const { data: prevScene } = await supabase
+    .from('scenes')
+    .select('id')
+    .eq('book_id', bookId)
+    .lt('order_key', currentScene.order_key)
+    .order('order_key', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  // 先頭シーンなら no-op(クライアントでも後退ボタン無効化済み)
+  if (!prevScene) {
+    return;
+  }
+
+  // 5. reading_progress を1つ前へ
+  const { error: updateError } = await supabase
+    .from('reading_progress')
+    .update({ current_scene_id: prevScene.id })
+    .eq('book_id', bookId);
+
+  if (updateError) {
+    throw new Error(`Failed to update reading_progress: ${updateError.message}`);
+  }
+
+  // 6. 再描画
   revalidatePath(`/books/${bookId}`);
 }
 
