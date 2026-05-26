@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { MemoForm } from './memo-form';      // ← 追加
 import { MemoList } from './memo-list';      // ← 追加
-import { progressScene, regressScene } from './actions';   // regressScene を追加
+import { progressScene, regressScene, toggleReadingMode } from './actions';
 import { SubmitButton } from './submit-button';            // 新規
 
 
@@ -107,8 +107,8 @@ export default async function BookPage({ params }: Props) {
         <h1 className="text-2xl font-bold">{book.title}</h1>
         <p className="mt-1 text-gray-600">{book.author}</p>
 
-        {/* 状態バッジ */}
-        <div className="mt-2">
+        {/* 状態バッジ + 読了切替 */}
+        <div className="mt-2 flex items-center gap-3">
           <span
             className={`inline-block rounded px-2 py-1 text-xs ${
               isFinished
@@ -118,6 +118,13 @@ export default async function BookPage({ params }: Props) {
           >
             {isFinished ? '読了' : '読書中'}
           </span>
+          {progress && (
+            <form action={toggleReadingMode.bind(null, book.id)}>
+              <SubmitButton className="rounded border px-3 py-1 text-xs text-gray-600 hover:bg-gray-100">
+                {isFinished ? '読書中に戻す' : '読了にする'}
+              </SubmitButton>
+            </form>
+          )}
         </div>
       </header>
 
