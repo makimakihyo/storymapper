@@ -155,6 +155,43 @@ export async function regressScene(bookId: string): Promise<void> {
   revalidatePath(`/books/${bookId}`);
 }
 
+
+export async function toggleReadingMode(bookId: string): Promise<void> {
+  const supabase = await createClient();
+
+  const { data: claimsData } = await supabase.auth.getClaims();
+  if (!claimsData?.claims) {
+    throw new Error('Unauthorized');
+  }
+
+  const { data: progress, error } = await supabase
+    .from('reading_progress')
+    .select('mode')
+    .eq('book_id', bookId)
+    .single();
+
+  if (error || !progress) {
+    throw new Error(`Reading progress not found: ${error?.message}`);
+  }
+
+  // rereading は将来対応。現時点は reading ↔ finished の 2 値トグル
+  const newMode = progress.mode === 'finished' ? 'reading' : 'finished';
+
+  const { error: updateError } = await supabase
+    .from('reading_progress')
+    .update({
+      mode: newMode,
+      finished_at: newMode === 'finished' ? new Date().toISOString() : null,
+    })
+    .eq('book_id', bookId);
+
+  if (updateError) {
+    throw new Error(`Failed to toggle mode: ${updateError.message}`);
+  }
+
+  revalidatePath(`/books/${bookId}`);
+}
+
 // =====================================================================
 // メモ・ブックマーク作成・削除
 // =====================================================================
