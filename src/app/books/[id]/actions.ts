@@ -189,6 +189,7 @@ export async function toggleReadingMode(bookId: string): Promise<void> {
     throw new Error(`Failed to toggle mode: ${updateError.message}`);
   }
 
+  revalidatePath('/books');
   revalidatePath(`/books/${bookId}`);
 }
 

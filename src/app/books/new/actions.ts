@@ -125,5 +125,5 @@ export async function createBookAction(
   }
 
   // 8) 成功: 暫定で / に戻す。/books/{bookId} は Day 6(5/14) で配線
-  redirect('/');
-}
+  redirect('/books');
+  }
