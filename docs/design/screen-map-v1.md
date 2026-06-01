@@ -3,8 +3,8 @@
 - 作成日: 2026-05-15 (Week 2 Day 7)
 - 統合元: Day 6 (2026-05-14) UX設計確定事項 / α版スコープ (2026-04-28確定) / データモデル v1 (2026-04-27確定) / ADR-0001/0003/0005(ドラフト含む)
 - 位置づけ: α版実装の指針となる画面構成・遷移・各画面の責務を確定する文書
-- 状態: **本ファイルは Cowork 上のたたき**。本人レビュー後、storymapper リポへ取り込み(格納先候補は §9 参照)
-- 寝かせ論点(Day 7 再判断): §4 にまとめた
+- 状態: **v1 確定 + Week 5 キャラ三点セット追記済み (2026-06-01)**
+- 更新履歴: Week 5 Day 3 (2026-06-01) キャラ三点セットUI設計確定 → §3.4 追加 / §4 判断6 追加 / §6・§7・§8 更新
 
 ---
 
@@ -96,9 +96,10 @@ flowchart TD
   - メモ追加(自由記述、現在シーンに紐づく)
   - ブックマーク(ワンタップ + 本文同時入力UI、**本文必須・空欄送信不可**。α版本確定 = 2026-05-19 判断5 確定)
     - **✅ ADR-0005 D7.1 案A 採用で確定(2026-05-19, Week 3 Day 4)**: 本ライフサイクルでは「本文空のブックマーク」を構造的に存在させず、ADR-0005 D7.1 の暗黙シグナルは「明示フラグ(`memos.is_public_eligible` 等)」での代替に方針変更。詳細は ADR-0005 D7.1 (commit `222b260`) 参照
-- **キャラ即参照**(常時アクセス、モーダル / サイドパネル / FABのいずれか。Week 3 で詳細決定):
-  - キャラ一覧 → タップで初登場シーン / 最新state(居場所・目的・所属) / 関連メモ
-  - ネタバレフィルタ: current_scene_id 以前のみ表示
+- **キャラ即参照**(FAB + ボトムシート方式で確定。Week 5 Day 3 設計完了 → §3.4 参照):
+  - FAB（右下固定）タップ → ボトムシートでキャラ一覧
+  - キャラタップ → 初登場シーン / 最新state(居場所・目的・所属) / 記録シーンリスト
+  - ネタバレフィルタ: `visible_characters` / `latest_visible_character_states` ビュー経由で自動対応
 - **読了ボタン**(確認ダイアログあり)
 
 ネタバレ制御:
@@ -135,6 +136,61 @@ flowchart TD
 - データソース: books, scenes, memos, characters, character_states, reading_progress, scene_labels (章ラベル)
 - 実装状況: ❌ 未実装(Week 3 着手、§7 の優先度参照)
 
+### 3.4 キャラ三点セット UI（`/books/{id}` 内オーバーレイ）
+
+**確定日: 2026-06-01 (Week 5 Day 3)**。実装は Week 6〜8。
+
+キャラ管理機能は `/books/{id}` 画面内にオーバーレイ（FAB + ボトムシート）として実装する。
+独立したページ遷移は行わない。
+
+#### 3.4.1 面1: キャラ一覧（ボトムシート）
+
+- 起動: FAB（右下固定、キャラアイコン）タップ
+- データソース: `visible_characters` ビュー（ネタバレフィルタ済み）
+- 表示: キャラ名 + 最新stateサマリー1行（居場所 or 目的）
+- アクション:
+  - キャラカードタップ → 面2（キャラ詳細 + 状態更新）
+  - 「＋ キャラを追加」ボタン → 面3（キャラ作成フォーム）
+
+#### 3.4.2 面2: キャラ詳細 + 状態更新（ボトムシート、詳細と更新フォームを1枚統合）
+
+- データソース:
+  - `characters` テーブル → name, aliases, first_appearance_scene_id
+  - `latest_visible_character_states` ビュー → current_location, goal, affiliation
+- 表示（上部）: キャラ名 / エイリアス / 初登場シーン名
+- 表示（中部）: 最新state（居場所・目的・所属）をプリフィル表示 + インライン編集
+  - 「現在シーンで記録」ボタン → `character_states` を UPSERT（scene_id = current_scene_id）
+  - `observed_in_scene_id` = `scene_id`（α版簡易運用）
+- 表示（下部）: 記録シーンリスト
+  - `character_states` JOIN `visible_scenes` で取得
+  - 「シーンN: ○○」形式で一覧表示
+  - タップ → そのシーンにジャンプ（ボトムシートを閉じてシーン移動）
+- 「関連メモ」直接表示は β以降（シーンジャンプ後にメモを参照する運用で代替）
+
+#### 3.4.3 面3: キャラ作成フォーム
+
+- 入力: キャラ名（必須）/ エイリアス（任意、複数可）/ メモ（任意）
+- `first_appearance_scene_id` = 作成時の `current_scene_id`（自動セット、UI非表示）
+- `static_attributes` / `visual_description` は β以降（入力UIなし）
+- 保存 → `characters` INSERT → 面1（キャラ一覧）に戻る
+
+#### 3.4.4 ネタバレフィルタとの結合点
+
+| UI | 使用ビュー | フィルタの仕組み |
+|---|---|---|
+| 面1（キャラ一覧） | `visible_characters` | `first_appearance_scene_id.order_key <= current_scene.order_key` |
+| 面2（最新state） | `latest_visible_character_states` | `scene_id.order_key <= current_scene.order_key`、DISTINCT ON で最新1件 |
+| 面2（記録シーンリスト） | `character_states` JOIN `visible_scenes` | `visible_scenes` でフィルタ済みのシーンのみ |
+
+読了後（mode='finished'）は全ビューがフィルタOFF → 全キャラ・全状態が可視。追加実装不要。
+
+#### 3.4.5 未確定事項（Week 6 実装時に詰める）
+
+- FABの表示制御（常時表示 vs キャラ登録後のみ）
+- ボトムシートの2段スタック可否（一覧→詳細で重ねるかどうか）
+- 記録シーンリストのソート順（order_key順 vs created_at順）
+- キャラ削除のα版実装可否
+- エイリアスの入力UI（タグ入力 vs カンマ区切りテキスト）
 ---
 
 ## 4. 寝かせ論点(Day 7 判断結果)
@@ -167,6 +223,13 @@ flowchart TD
   - β拡張時の公開対象判定は新規フラグ追加方式に変更(`memos.is_public_eligible` 等、ADR-0005 D7.1 詳細参照)
 - **参照**: ADR-0005 D7.1 (commit `222b260`)、memory `project_storymapper.md` の「Week 3 Day 4 進捗(2026-05-19): 判断5 確定」、Cowork `storymapper_decision5_d7_1_discussion_points_draft.md`(議論論点リスト)
 
+### 判断6: キャラ三点セットUI設計 → **確定(2026-06-01 Week 5 Day 3)**
+
+- **FAB + ボトムシート**方式を採用（§3.4 参照）
+- **新規マイグレーション**: `character_states` に `UNIQUE(character_id, scene_id)` を追加（UPSERT対応）。ファイル名案: `20260601000000_character_states_unique_char_scene.sql`
+- **関連メモ直接表示**: β以降。α版はシーンジャンプで代替
+- **α版フォームフィールド**: キャラ作成は名前+エイリアス+メモのみ。`static_attributes`/`visual_description` はβ以降
+- **参照**: Cowork `storymapper_character_design_memo.md`（2026-06-01作成）
 ---
 
 ## 5. 主要UC再確認(α版)
@@ -183,7 +246,7 @@ flowchart TD
 ## 6. データモデル整合性チェック
 
 - 本マップで参照する全テーブル/ビューはデータモデル v1 (2026-04-27確定) で対応可能
-- ADR-0005 非破壊原則と整合: α版実装中は v1 に ALTER 不要
+- **追加マイグレーション1本**: `character_states` に `UNIQUE(character_id, scene_id)` を追加（Week 6 着手時に適用）。ADR-0005 非破壊原則（ALTER追加のみ）と整合
 - security_invoker=true ビュー継続使用(ADR-0003)
 - α版で新規テーブル追加なし → ADR-0004 (GRANT規約) は α版実装に影響しない(規約自体は Week 3 で起票)
 
@@ -205,11 +268,15 @@ flowchart TD
 ブロック化: 1 単独 / 2-4 まとまり / 5 単独 / 6-7 まとまり / 8 単独
 Claude 推奨ターゲット案(議論材料): 1-4 までを Week 3 のターゲット。理由は 5(キャラ即参照)が UI 設計で時間かかる読み、8(挿入/削除)は order_key 運用検証で別途時間が要る読み
 
+**Week 6〜8 キャラ三点セット実装順（Week 5 Day 3 確定）**:
+- Week 6: キャラ作成 CRUD（面3フォーム + 面1一覧）→ main マージ
+- Week 7: 状態スナップショット入力UI（面2の更新フォーム + UPSERT）
+- Week 8: キャラ即参照UI（FAB + ボトムシート統合）+ ネタバレフィルタ適用 → α版機能完走
+
 ---
 
 ## 8. 未確定事項(Week 3 以降で扱う / 本マップでは触れない)
 
-- キャラ即参照UI の具体形(モーダル / サイドパネル / FAB位置)
 - メモ入力UI のインタラクション(モーダル / インライン / FAB)
 - シーン名編集のインタラクション(タップで即編集 / メニュー経由)
 - 章ラベル付与UI(α版は章ラベルのみ使用)
