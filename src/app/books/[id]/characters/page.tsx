@@ -2,6 +2,7 @@ import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { CharacterForm } from './character-form';
+import { CharacterItem } from './character-item';
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -61,17 +62,7 @@ export default async function CharactersPage({ params }: Props) {
         {characters && characters.length > 0 ? (
           <ul className="space-y-2">
             {characters.map((c) => (
-              <li key={c.id} className="rounded border p-3">
-                <p className="font-medium">{c.name}</p>
-                {c.aliases && c.aliases.length > 0 && (
-                  <p className="text-sm text-muted-foreground">
-                    別名: {c.aliases.join('、')}
-                  </p>
-                )}
-                {c.notes && (
-                  <p className="text-sm text-muted-foreground">{c.notes}</p>
-                )}
-              </li>
+              <CharacterItem key={c.id} bookId={id} character={c} />
             ))}
           </ul>
         ) : (
