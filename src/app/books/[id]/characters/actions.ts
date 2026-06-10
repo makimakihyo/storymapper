@@ -109,7 +109,8 @@ export async function updateCharacterAction(
       aliases: parseAliases(aliases),
       notes: notes && notes.length > 0 ? notes : null,
     })
-    .eq('id', characterId);
+    .eq('id', characterId)
+    .eq('book_id', bookId);
 
   if (updateError) {
     return { kind: 'formError', message: 'キャラの更新に失敗しました' };
@@ -137,10 +138,11 @@ export async function deleteCharacterAction(
   const { error } = await supabase
     .from('characters')
     .delete()
-    .eq('id', characterId);
-
+    .eq('id', characterId)
+    .eq('book_id', bookId);
+  
   if (error) {
-    return { error: `キャラ削除に失敗しました: ${error.message}` };
+    return { error: `キャラ削除に失敗しました` };
   }
 
   revalidatePath(`/books/${bookId}/characters`);
