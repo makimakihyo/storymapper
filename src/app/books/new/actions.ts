@@ -124,6 +124,6 @@ export async function createBookAction(
     return { kind: 'formError', message: '読書進捗の初期化に失敗しました' };
   }
 
-  // 8) 成功: 暫定で / に戻す。/books/{bookId} は Day 6(5/14) で配線
-  redirect('/books');
-  }
+  // 8) 成功: 作成した本の詳細ページへ遷移
+  redirect(`/books/${bookId}`);
+}
