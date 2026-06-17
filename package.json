@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
     "types:gen": "supabase gen types typescript --linked > src/lib/supabase/database.types.ts"
   },
   "dependencies": {
@@ -38,3 +39,5 @@
     "typescript": "^5"
   }
 }
+
+
