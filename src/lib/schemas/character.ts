@@ -32,3 +32,28 @@ export function parseAliases(raw: string | undefined): string[] | null {
     .filter((s) => s.length > 0);
   return arr.length > 0 ? arr : null;
 }
+
+export const characterStateFormSchema = z
+  .object({
+    current_location: z
+      .string().trim().max(200, '居場所は200文字以内で入力してください')
+      .optional().or(z.literal('')),
+    goal: z
+      .string().trim().max(200, '目的は200文字以内で入力してください')
+      .optional().or(z.literal('')),
+    affiliation: z
+      .string().trim().max(100, '所属は100文字以内で入力してください')
+      .optional().or(z.literal('')),
+  })
+  .refine(
+    (v) =>
+      [v.current_location, v.goal, v.affiliation].some(
+        (s) => s && s.trim().length > 0,
+      ),
+    {
+      message: '居場所・目的・所属のいずれかを入力してください',
+      path: ['current_location'],
+    },
+  );
+
+export type CharacterStateFormInput = z.infer<typeof characterStateFormSchema>;

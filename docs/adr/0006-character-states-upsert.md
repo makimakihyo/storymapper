@@ -2,6 +2,7 @@
 
 - ステータス: 採用
 - 日付: 2026-06-01（Week 5 Day 3）
+- 実装確定: 2026-06-15（Week 7 Day 3）
 - 関係者: makimaki
 
 ---
@@ -20,8 +21,11 @@
 `latest_visible_character_states` ビューは `ORDER BY s.order_key DESC` で最新を取るが、**同一シーン内の複数レコードはどれが選ばれるか不定**（`order_key` が同値のため）。
 
 ## 決定
+### 実装（2026-06-15 確定）
 
-`character_states` テーブルに `UNIQUE(character_id, scene_id)` 制約を追加し、アプリ層でUPSERTを使う。
+- アプリ層は supabase-js の `.upsert(payload, { onConflict: 'character_id,scene_id' })` を使用。`updated_at` はトリガ `trg_character_states_updated` が更新するため明示しない。
+- **scene_id の所有チェックを Server Action 層で実施（α採用・β送りにしない）**。RLS（`character_states_owner_all`）は `character_id` の所有しか縛らず、`scene_id` が同一 book に属するかは検証しない。そこで `src/lib/books/ownership.ts` の `characterBelongsToBook` / `sceneBelongsToBook` で「character・scene が共に同一 book」を確認する。relationships 等が再利用する所有ガードの基準実装（Week 6 で踏んだ book_id 絞り込み漏れと同クラスの予防）。
+- 入力は三点（current_location / goal / affiliation）のみ。Zod でいずれか必須。`emotion / visual_change / notes` はα入力対象外。
 
 ```sql
 -- マイグレーション: 20260601000000_character_states_unique_char_scene.sql
@@ -72,7 +76,7 @@ ADR-0005 D2: 「β拡張は非破壊的な追加のみで実現する」
 
 ## 影響
 
-- **追加マイグレーション**: `20260601000000_character_states_unique_char_scene.sql`（Week 6 着手前に適用）
+- **追加マイグレーション**: `20260615044552_character_states_unique_char_scene.sql`（2026-06-15 db push 適用）。UNIQUE 制約追加に加え、重複する非UNIQUEインデックス `idx_character_states_char_scene` を DROP。
 - **アプリ層**: キャラ状態保存のServer ActionでUPSERT構文を使用
 - **ビュー変更なし**: `latest_visible_character_states` はそのまま使用可能
 - **RLS変更なし**: `character_states_owner_all` ポリシーはそのまま

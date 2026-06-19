@@ -255,3 +255,39 @@ export async function deleteMemo(
 
   revalidatePath(`/books/${bookId}`);
 }
+
+/**
+ * シーン名(scenes.summary)を更新する。空文字なら null(未設定)に戻す。
+ * 所有権は RLS(scenes_owner_all USING)が担保。book_id でも絞る(Week6 の教訓)。
+ */
+export async function updateSceneSummaryAction(
+  bookId: string,
+  sceneId: string,
+  summary: string,
+): Promise<{ error: string } | void> {
+  const supabase = await createClient();
+
+  const { data: claimsData } = await supabase.auth.getClaims();
+  if (!claimsData?.claims) {
+    return { error: 'サインインが必要です' };
+  }
+
+  const trimmed = summary.trim();
+  if (trimmed.length > 200) {
+    return { error: 'シーン名は200文字以内で入力してください' };
+  }
+
+  const { data: updated, error } = await supabase
+    .from('scenes')
+    .update({ summary: trimmed.length > 0 ? trimmed : null })
+    .eq('id', sceneId)
+    .eq('book_id', bookId)
+    .select('id')
+    .maybeSingle();
+
+  if (error || !updated) {
+    return { error: 'シーン名の保存に失敗しました' };
+  }
+
+  revalidatePath(`/books/${bookId}`);
+}

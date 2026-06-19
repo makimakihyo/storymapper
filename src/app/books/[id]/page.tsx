@@ -5,7 +5,7 @@ import { MemoForm } from './memo-form';      // ← 追加
 import { MemoList } from './memo-list';      // ← 追加
 import { progressScene, regressScene, toggleReadingMode } from './actions';
 import { SubmitButton } from './submit-button';            // 新規
-
+import { SceneNameEditor } from './scene-name-editor';
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -39,10 +39,10 @@ export default async function BookPage({ params }: Props) {
     .eq('book_id', id)
     .single();
 
-  // 4. シーン一覧取得(位置計算 + 総数)
+  // 4. シーン一覧取得(位置計算 + 総数 + summary)
   const { data: scenes } = await supabase
     .from('scenes')
-    .select('id, order_key')
+    .select('id, order_key, summary')   // ← summary 追加
     .eq('book_id', id)
     .order('order_key', { ascending: true });
 
@@ -51,6 +51,16 @@ export default async function BookPage({ params }: Props) {
     (s) => s.id === progress?.current_scene_id
   ) ?? -1;
   const currentScenePosition = currentSceneIndex >= 0 ? currentSceneIndex + 1 : 0;
+
+   // 追加: 現在シーンの summary
+  const currentSceneSummary =
+    scenes?.find((s) => s.id === progress?.current_scene_id)?.summary ?? null;
+
+  // 追加: 進捗率(%)
+  const progressPct =
+    totalScenes > 0
+      ? Math.round((currentScenePosition / totalScenes) * 100)
+      : 0;
 
 // 現在シーンのメモ有無(案1: 空シーンからの新規作成を弾く)
   let currentSceneHasMemo = false;
@@ -128,20 +138,45 @@ export default async function BookPage({ params }: Props) {
         </div>
       </header>
 
-      {/* 現在シーン情報 */}
+      {/* 現在シーン情報: シーン名編集 + 位置 + 進捗 */}
       <section className="mt-6 rounded border p-4">
-        <div className="text-sm text-gray-500">
-          シーン {currentScenePosition} / 全 {totalScenes} シーン
+        {/* シーン名(クリックでインライン編集)。優先度: summary → 章ラベル → なし */}
+        <SceneNameEditor
+          bookId={book.id}
+          sceneId={progress?.current_scene_id ?? null}
+          summary={currentSceneSummary}
+          chapterLabel={chapterLabelName}
+        />
+
+        {/* 位置(強調) */}
+        <div className="mt-2 flex items-baseline gap-2">
+          <span className="text-sm text-gray-500">シーン</span>
+          <span className="text-2xl font-bold tabular-nums">
+            {currentScenePosition > 0 ? currentScenePosition : '—'}
+          </span>
+          <span className="text-sm text-gray-500">/ 全 {totalScenes}</span>
         </div>
-        {chapterLabelName && (
-          <div className="mt-1 text-lg font-medium">{chapterLabelName}</div>
-        )}
-        {!chapterLabelName && currentScenePosition > 0 && (
-          <div className="mt-1 text-lg font-medium text-gray-400">
-            (シーン名なし)
+
+        {/* 進捗バー */}
+        <div className="mt-3">
+          <div
+            className="h-2 w-full overflow-hidden rounded-full bg-gray-200"
+            role="progressbar"
+            aria-valuenow={progressPct}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
+            <div
+              className="h-full rounded-full bg-blue-600 transition-all"
+              style={{ width: `${progressPct}%` }}
+            />
           </div>
-        )}
+          <div className="mt-1 text-right text-xs text-gray-500">
+            {progressPct}%
+          </div>
+        </div>
       </section>
+
 
       {/* メモ・ブックマーク */}
       {progress?.current_scene_id && (
@@ -161,14 +196,15 @@ export default async function BookPage({ params }: Props) {
         </section>
       )}
 
-      {/* POVキャラ・場所 (α版は枠だけ、空表示OK) */}
-      <section className="mt-4 rounded border p-4 text-sm text-gray-500">
-        <div>
-          POVキャラ: <span className="italic">(α版未対応)</span>
-        </div>
-        <div className="mt-1">
-          場所: <span className="italic">-</span>
-        </div>
+      {/* 登場人物への導線(旧 POVキャラ枠を置換) */}
+      <section className="mt-4">
+        <Link
+          href={`/books/${book.id}/characters`}
+          className="flex items-center justify-between rounded border p-4 hover:bg-gray-50"
+        >
+          <span className="font-medium">登場人物</span>
+          <span className="text-sm text-gray-500">一覧・状態を記録 →</span>
+        </Link>
       </section>
 
       {/* シーン移動(後退 / 進行) */}
