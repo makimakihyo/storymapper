@@ -14,6 +14,11 @@ import {
   characterBelongsToBook,
   sceneBelongsToBook,
 } from '@/lib/books/ownership';
+import {
+  summarizeCharacter,
+  type CharacterStateForSummary,
+  type SummarizeUsage,
+} from '@/lib/ai/summarize-character';
 
 export type CharacterFormFailure =
   | {
@@ -243,4 +248,132 @@ export async function saveCharacterStateAction(
 
   // 5) 同一ページ内の一覧へ即反映
   revalidatePath(`/books/${bookId}/characters`);
+}
+
+
+export type SummarizeCharacterResult =
+  | { ok: true; summary: string; usage: SummarizeUsage }
+  | { ok: false; message: string };
+
+/**
+ * キャラの「ここまでの動向」をネタバレなしで要約して返す(保存しない=α)。
+ * - ネタバレ第1層: scene.order_key <= 現在 でフィルタ(決定的)。
+ * - ネタバレ第2層: summarizeCharacter の system プロンプト。
+ * - usage は戻り値に含める(Day4 のコスト計測/eval が拾う口)。
+ */
+export async function summarizeCharacterAction(
+  bookId: string,
+  characterId: string,
+): Promise<SummarizeCharacterResult> {
+  const supabase = await createClient();
+
+  // 1) 認証
+  const { data: claimsData, error: claimsError } =
+    await supabase.auth.getClaims();
+  if (claimsError || !claimsData?.claims?.sub) {
+    return { ok: false, message: 'サインインが必要です' };
+  }
+
+  // 2) 所有権ガード(characters のみ。RLS と二重で締める)
+  const charOk = await characterBelongsToBook(supabase, bookId, characterId);
+  if (!charOk) {
+    return { ok: false, message: '不正なキャラです' };
+  }
+
+  // 3) キャラ(名前/notes) と 現在シーン を取得
+  const [{ data: character }, { data: progress }] = await Promise.all([
+    supabase
+      .from('characters')
+      .select('name, notes')
+      .eq('id', characterId)
+      .eq('book_id', bookId)
+      .single(),
+    supabase
+      .from('reading_progress')
+      .select('current_scene_id')
+      .eq('book_id', bookId)
+      .single(),
+  ]);
+
+  if (!character) {
+    return { ok: false, message: 'キャラが見つかりません' };
+  }
+  if (!progress?.current_scene_id) {
+    return { ok: false, message: '現在シーンが未設定です' };
+  }
+
+  // 4) シーン一覧 → 現在の order_key と「現在以前の可視シーン」を確定(第1層)
+  const { data: scenes } = await supabase
+    .from('scenes')
+    .select('id, order_key, summary')
+    .eq('book_id', bookId)
+    .order('order_key', { ascending: true });
+
+  const sceneList = scenes ?? [];
+  const currentIdx = sceneList.findIndex(
+    (s) => s.id === progress.current_scene_id,
+  );
+  if (currentIdx < 0) {
+    return { ok: false, message: '現在シーンが見つかりません' };
+  }
+  const currentOrderKey = sceneList[currentIdx].order_key;
+
+  // scene_id -> {position, name} (可視範囲のみ)
+  const visible = new Map<string, { position: number; name: string | null }>();
+  sceneList.forEach((s, i) => {
+    if (s.order_key <= currentOrderKey) {
+      visible.set(s.id, { position: i + 1, name: s.summary });
+    }
+  });
+
+  // 5) このキャラの状態を取得 → 可視シーンのみ採用(第1層・JSフィルタ)
+  const { data: rawStates } = await supabase
+    .from('character_states')
+    .select('scene_id, current_location, goal, affiliation, emotion, notes')
+    .eq('character_id', characterId);
+
+  const states: CharacterStateForSummary[] = (rawStates ?? [])
+    .filter((s) => visible.has(s.scene_id))
+    .map((s) => {
+      const v = visible.get(s.scene_id)!;
+      return {
+        scenePosition: v.position,
+        sceneName: v.name,
+        currentLocation: s.current_location,
+        goal: s.goal,
+        affiliation: s.affiliation,
+        emotion: s.emotion,
+        notes: s.notes,
+      };
+    })
+    .sort((a, b) => a.scenePosition - b.scenePosition);
+
+  if (states.length === 0) {
+    return {
+      ok: false,
+      message: '現在シーンまでに、このキャラの状態メモがありません',
+    };
+  }
+
+  // 6) 生成
+  try {
+    const { summary, usage } = await summarizeCharacter({
+      characterName: character.name,
+      characterNotes: character.notes,
+      currentScenePosition: currentIdx + 1,
+      states,
+    });
+
+    // Day4 まではログ出力のみ(永続化はβ)。観測の口はここ。
+    console.info('[ai.summarizeCharacter] usage', {
+      bookId,
+      characterId,
+      ...usage,
+    });
+
+    return { ok: true, summary, usage };
+  } catch (e) {
+    console.error('[ai.summarizeCharacter] error', e);
+    return { ok: false, message: '要約の生成に失敗しました' };
+  }
 }
