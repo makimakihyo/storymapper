@@ -11,12 +11,13 @@ import {
   characterFormSchema,
   type CharacterFormInput,
 } from '@/lib/schemas/character';
-import { updateCharacterAction } from './actions';
+import { updateCharacterAction, summarizeCharacterAction } from './actions';
 import { DeleteCharacterButton } from './delete-character-button';
 import {
   CharacterStateForm,
   type CharacterStatePrefill,
 } from './character-state-form';
+
 
 export type CharacterListItem = {
   id: string;
@@ -46,6 +47,9 @@ export function CharacterItem({
   const [isRecording, setIsRecording] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [serverError, setServerError] = useState<string | null>(null);
+  const [summary, setSummary] = useState<string | null>(null);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [isSummarizing, startSummarize] = useTransition();
 
   const defaults: CharacterFormInput = {
     name: character.name,
@@ -96,6 +100,19 @@ export function CharacterItem({
         return;
       }
       setServerError(result.message);
+    });
+  };
+
+  const handleSummarize = () => {
+    setSummary(null);
+    setSummaryError(null);
+    startSummarize(async () => {
+      const res = await summarizeCharacterAction(bookId, character.id);
+      if (res.ok) {
+        setSummary(res.summary);
+      } else {
+        setSummaryError(res.message);
+      }
     });
   };
 
@@ -281,6 +298,37 @@ export function CharacterItem({
               onCancel={() => setIsRecording(false)}
             />
           </div>
+        )}
+      </div>
+
+      {/* ③ ここまでの動向(AI要約) */}
+      <div className="border-t p-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-[11px] text-muted-foreground">
+            ここまでの動向（AI要約・ネタバレなし）
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            onClick={handleSummarize}
+            disabled={isSummarizing || currentScenePosition === 0}
+          >
+            {isSummarizing ? '要約中…' : summary ? '再要約' : '要約する'}
+          </Button>
+        </div>
+
+        {summaryError && (
+          <p role="alert" className="mt-2 text-sm text-destructive">
+            {summaryError}
+          </p>
+        )}
+
+        {summary && (
+          <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">
+            {summary}
+          </p>
         )}
       </div>
     </li>
