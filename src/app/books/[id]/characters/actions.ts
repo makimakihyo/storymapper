@@ -19,6 +19,11 @@ import {
   type CharacterStateForSummary,
   type SummarizeUsage,
 } from '@/lib/ai/summarize-character';
+import {
+  extractCharacterState,
+  type ExtractedState,
+  type ExtractUsage,
+} from '@/lib/ai/extract-character-state';
 
 export type CharacterFormFailure =
   | {
@@ -375,5 +380,100 @@ export async function summarizeCharacterAction(
   } catch (e) {
     console.error('[ai.summarizeCharacter] error', e);
     return { ok: false, message: '要約の生成に失敗しました' };
+  }
+}
+
+export type ExtractCharacterStateResult =
+  | { ok: true; fields: ExtractedState; usage: ExtractUsage }
+  | { ok: false; message: string };
+
+/**
+ * 自由文メモ → 状態3欄を抽出して返す（保存しない＝フォーム prefill 用）。
+ * - 抽出は既読メモのみ＝ネタバレ漏洩は構造的に無し（ADR-0007 責務分界）。
+ * - 所有ガード: character・scene が共に同一 book か（saveCharacterStateAction と同基準）。
+ * - usage は戻り値に含める（コスト計測の口・Week8 と同パターン）。
+ */
+export async function extractCharacterStateAction(
+  bookId: string,
+  characterId: string,
+  sceneId: string,
+  rawMemo: string,
+): Promise<ExtractCharacterStateResult> {
+  const memo = rawMemo.trim();
+  if (!memo) {
+    return { ok: false, message: 'メモが空です' };
+  }
+  if (memo.length > 2000) {
+    return { ok: false, message: 'メモが長すぎます（2000字以内）' };
+  }
+
+  const supabase = await createClient();
+
+  // 1) 認証
+  const { data: claimsData, error: claimsError } =
+    await supabase.auth.getClaims();
+  if (claimsError || !claimsData?.claims?.sub) {
+    return { ok: false, message: 'サインインが必要です' };
+  }
+
+  // 2) 所有・整合ガード（character と scene が共に同一 book）
+  const [charOk, sceneOk] = await Promise.all([
+    characterBelongsToBook(supabase, bookId, characterId),
+    sceneBelongsToBook(supabase, bookId, sceneId),
+  ]);
+  if (!charOk || !sceneOk) {
+    return { ok: false, message: '不正なキャラまたはシーンです' };
+  }
+
+  // 3) 対象キャラ名・シーン位置・既知キャラ一覧を取得（プロンプト文脈用）
+  const [{ data: character }, { data: scenes }, { data: bookCharacters }] =
+    await Promise.all([
+      supabase
+        .from('characters')
+        .select('name')
+        .eq('id', characterId)
+        .eq('book_id', bookId)
+        .single(),
+      supabase
+        .from('scenes')
+        .select('id, order_key')
+        .eq('book_id', bookId)
+        .order('order_key', { ascending: true }),
+      supabase.from('characters').select('name').eq('book_id', bookId),
+    ]);
+
+  if (!character) {
+    return { ok: false, message: 'キャラが見つかりません' };
+  }
+  const sceneList = scenes ?? [];
+  const sceneIdx = sceneList.findIndex((s) => s.id === sceneId);
+  if (sceneIdx < 0) {
+    return { ok: false, message: 'シーンが見つかりません' };
+  }
+  const scenePosition = sceneIdx + 1;
+  const knownCharacters = (bookCharacters ?? [])
+    .map((c) => c.name)
+    .filter((n): n is string => !!n);
+
+  // 4) 抽出
+  try {
+    const { fields, usage } = await extractCharacterState({
+      rawMemo: memo,
+      characterName: character.name,
+      scenePosition,
+      knownCharacters,
+    });
+
+    console.info('[ai.extractCharacterState] usage', {
+      bookId,
+      characterId,
+      sceneId,
+      ...usage,
+    });
+
+    return { ok: true, fields, usage };
+  } catch (e) {
+    console.error('[ai.extractCharacterState] error', e);
+    return { ok: false, message: '抽出に失敗しました' };
   }
 }
