@@ -63,7 +63,7 @@ export default async function CharactersPage({ params }: Props) {
   if (currentSceneId && characters && characters.length > 0) {
     const { data: states } = await supabase
       .from('character_states')
-      .select('character_id, current_location, goal, affiliation')
+      .select('character_id, raw_memo, current_location, goal, affiliation')
       .eq('scene_id', currentSceneId)
       .in(
         'character_id',
@@ -71,13 +71,13 @@ export default async function CharactersPage({ params }: Props) {
       );
     for (const s of states ?? []) {
       stateByCharacter.set(s.character_id, {
+        raw_memo: s.raw_memo,
         current_location: s.current_location,
         goal: s.goal,
         affiliation: s.affiliation,
       });
     }
   }
-
   return (
     <main className="mx-auto max-w-2xl space-y-6 p-4">
       <div className="space-y-1">

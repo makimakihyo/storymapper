@@ -206,7 +206,7 @@ export async function saveCharacterStateAction(
       fieldErrors: toStateFieldErrors(parsed.error.issues),
     };
   }
-  const { current_location, goal, affiliation } = parsed.data;
+  const { current_location, goal, affiliation, raw_memo } = parsed.data;
 
   // 2) 認証ユーザー確認
   const supabase = await createClient();
@@ -234,6 +234,7 @@ export async function saveCharacterStateAction(
         character_id: characterId,
         scene_id: sceneId,
         observed_in_scene_id: sceneId,
+        raw_memo: raw_memo && raw_memo.length > 0 ? raw_memo : null,
         current_location:
           current_location && current_location.length > 0
             ? current_location
