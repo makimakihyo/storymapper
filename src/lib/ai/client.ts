@@ -7,6 +7,8 @@ export const anthropic = new Anthropic({
 
 // モデルは1か所に集約(Day4でコスト/品質のノブとして触る)。
 export const AI_MODELS = {
-  // 要約は品質寄りで sonnet。コスト計測後に haiku への切替を検討(Day4)。
+  // 要約は品質寄りで sonnet。
   characterSummary: 'claude-sonnet-4-6',
+  // 抽出は Haiku 既定（Day6/7 検証: 忠実性同等・簡潔・安い）。
+  stateExtraction: 'claude-haiku-4-5',
 } as const;

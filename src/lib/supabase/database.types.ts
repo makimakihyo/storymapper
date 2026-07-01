@@ -86,6 +86,7 @@ export type Database = {
           id: string
           notes: string | null
           observed_in_scene_id: string | null
+          raw_memo: string | null
           scene_id: string
           updated_at: string
           visual_change: string | null
@@ -100,6 +101,7 @@ export type Database = {
           id?: string
           notes?: string | null
           observed_in_scene_id?: string | null
+          raw_memo?: string | null
           scene_id: string
           updated_at?: string
           visual_change?: string | null
@@ -114,6 +116,7 @@ export type Database = {
           id?: string
           notes?: string | null
           observed_in_scene_id?: string | null
+          raw_memo?: string | null
           scene_id?: string
           updated_at?: string
           visual_change?: string | null
