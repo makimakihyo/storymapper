@@ -10,10 +10,14 @@ import {
   characterStateFormSchema,
   type CharacterStateFormInput,
 } from '@/lib/schemas/character';
-import { saveCharacterStateAction } from './actions';
+import {
+  saveCharacterStateAction,
+  extractCharacterStateAction,
+} from './actions';
 
 // 現在シーンの既存 state（プリフィル元）。無ければ null。
 export type CharacterStatePrefill = {
+  raw_memo: string | null;
   current_location: string | null;
   goal: string | null;
   affiliation: string | null;
@@ -37,17 +41,22 @@ export function CharacterStateForm({
   onCancel,
 }: Props) {
   const [isPending, startTransition] = useTransition();
+  const [isExtracting, startExtract] = useTransition();
   const [serverError, setServerError] = useState<string | null>(null);
+  const [extractError, setExtractError] = useState<string | null>(null);
 
   const {
     register,
     handleSubmit,
     setError,
+    setValue,
+    getValues,
     formState: { errors },
   } = useForm<CharacterStateFormInput>({
     resolver: zodResolver(characterStateFormSchema),
     // プリフィル＝現在シーンの既存record、無ければ空
     defaultValues: {
+      raw_memo: initial?.raw_memo ?? '',
       current_location: initial?.current_location ?? '',
       goal: initial?.goal ?? '',
       affiliation: initial?.affiliation ?? '',
@@ -63,6 +72,33 @@ export function CharacterStateForm({
     );
   }
 
+  // 自由文メモ → AI抽出 → 3欄を prefill（保存はしない）。
+  const handleExtract = () => {
+    setExtractError(null);
+    const memo = (getValues('raw_memo') ?? '').trim();
+    if (!memo) {
+      setExtractError('メモを入力してから抽出してください');
+      return;
+    }
+    startExtract(async () => {
+      const res = await extractCharacterStateAction(
+        bookId,
+        characterId,
+        currentSceneId,
+        memo,
+      );
+      if (res.ok) {
+        setValue('current_location', res.fields.current_location, {
+          shouldDirty: true,
+        });
+        setValue('goal', res.fields.goal, { shouldDirty: true });
+        setValue('affiliation', res.fields.affiliation, { shouldDirty: true });
+      } else {
+        setExtractError(res.message);
+      }
+    });
+  };
+
   const onSubmit = (data: CharacterStateFormInput) => {
     setServerError(null);
     startTransition(async () => {
@@ -72,7 +108,6 @@ export function CharacterStateForm({
         currentSceneId,
         data,
       );
-      // 成功時は Server Action 側で revalidate のみ → result は void
       if (!result) {
         onSaved?.();
         return;
@@ -94,6 +129,41 @@ export function CharacterStateForm({
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-3" noValidate>
+      {/* 自由文メモ（canonical）＋ 抽出ボタン */}
+      <div className="space-y-1">
+        <Label htmlFor={`memo-${characterId}`}>状態メモ（自由文）</Label>
+        <textarea
+          id={`memo-${characterId}`}
+          rows={3}
+          placeholder="例: 港町の酒場にいる。灯台の鍵を探している。組合と対立中。"
+          aria-invalid={!!errors.raw_memo}
+          className="flex min-h-[72px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+          {...register('raw_memo')}
+        />
+        {errors.raw_memo && (
+          <p className="text-sm text-destructive">{errors.raw_memo.message}</p>
+        )}
+        <div className="flex items-center gap-2 pt-1">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={handleExtract}
+            disabled={isExtracting || isPending}
+          >
+            {isExtracting ? '抽出中…' : 'メモから抽出'}
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            抽出結果は下の3欄に入ります。編集して記録できます。
+          </span>
+        </div>
+        {extractError && (
+          <p role="alert" className="text-sm text-destructive">
+            {extractError}
+          </p>
+        )}
+      </div>
+
       <div className="space-y-1">
         <Label htmlFor={`loc-${characterId}`}>居場所</Label>
         <Input
@@ -137,7 +207,6 @@ export function CharacterStateForm({
         )}
       </div>
 
-      {/* refine「いずれか必須」エラーは path:['current_location'] に乗るため居場所欄下に出る */}
       {serverError && (
         <p role="alert" className="text-sm text-destructive">
           {serverError}
@@ -145,7 +214,7 @@ export function CharacterStateForm({
       )}
 
       <div className="flex gap-2">
-        <Button type="submit" disabled={isPending}>
+        <Button type="submit" disabled={isPending || isExtracting}>
           {isPending ? '記録中…' : '現在シーンで記録'}
         </Button>
         {onCancel && (
