@@ -6,13 +6,17 @@ import { MemoList } from './memo-list';      // ← 追加
 import { progressScene, regressScene, toggleReadingMode } from './actions';
 import { SubmitButton } from './submit-button';            // 新規
 import { SceneNameEditor } from './scene-name-editor';
+import { MainCharacterBand, type BandCharacter } from './main-character-band'; // 【試作】
 
 type Props = {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>; // 【試作】?bandPos
 };
 
-export default async function BookPage({ params }: Props) {
+export default async function BookPage({ params, searchParams }: Props) {
   const { id } = await params;
+  const sp = await searchParams;                              // 【試作】
+  const bandPos = sp.bandPos === 'bottom' ? 'bottom' : 'top'; // 【試作】既定は上部
   const supabase = await createClient();
 
   // 1. 認証ガード
@@ -62,7 +66,83 @@ export default async function BookPage({ params }: Props) {
       ? Math.round((currentScenePosition / totalScenes) * 100)
       : 0;
 
-// 現在シーンのメモ有無(案1: 空シーンからの新規作成を弾く)
+// ===== 主要キャラ帯 プロトタイプ用データ【試作・DP-4判定用】 =====
+  // 登場頻度順(記録シーン数降順・同数は直近更新でタイブレーク)の上位5名を、
+  // 現在位置(order_key)以前の character_states から JS 集計で算出。
+  // 各キャラの「最新の可視状態」(scene order_key 最大)を raw_memo 込みで拾う。
+  // 注: 本実装(step3)は latest_visible_character_states ビューを使う予定だが、
+  //     現状ビューは raw_memo 未収録(cs.* 凍結)のため、試作は基底テーブルを直接集計する。
+  const currentOrderKey =
+    currentSceneIndex >= 0 ? scenes![currentSceneIndex].order_key : null;
+  let bandCharacters: BandCharacter[] = [];
+  if (currentOrderKey !== null) {
+    const { data: chars } = await supabase
+      .from('characters')
+      .select('id, name')
+      .eq('book_id', id);
+    if (chars && chars.length > 0) {
+      const sceneOrderById = new Map(
+        (scenes ?? []).map((s) => [s.id, s.order_key]),
+      );
+      const { data: states } = await supabase
+        .from('character_states')
+        .select(
+          'character_id, scene_id, current_location, goal, affiliation, raw_memo, updated_at',
+        )
+        .in(
+          'character_id',
+          chars.map((c) => c.id),
+        );
+      type StateRow = NonNullable<typeof states>[number];
+      type Agg = {
+        count: number;
+        maxUpdatedAt: string;
+        latestOrder: string;
+        latestState: StateRow;
+      };
+      const agg = new Map<string, Agg>();
+      for (const s of states ?? []) {
+        const ok = sceneOrderById.get(s.scene_id);
+        if (ok === undefined || ok > currentOrderKey) continue; // ネタバレフィルタ
+        const prev = agg.get(s.character_id);
+        if (!prev) {
+          agg.set(s.character_id, {
+            count: 1,
+            maxUpdatedAt: s.updated_at,
+            latestOrder: ok,
+            latestState: s,
+          });
+        } else {
+          prev.count += 1;
+          if (s.updated_at > prev.maxUpdatedAt) prev.maxUpdatedAt = s.updated_at;
+          if (ok > prev.latestOrder) {
+            prev.latestOrder = ok;
+            prev.latestState = s;
+          }
+        }
+      }
+      const nameById = new Map(chars.map((c) => [c.id, c.name]));
+      bandCharacters = [...agg.entries()]
+        .sort(
+          (a, b) =>
+            b[1].count - a[1].count ||
+            (b[1].maxUpdatedAt > a[1].maxUpdatedAt ? 1 : -1),
+        )
+        .slice(0, 5)
+        .map(([cid, a]) => ({
+          id: cid,
+          name: nameById.get(cid) ?? '(名称不明)',
+          state: {
+            current_location: a.latestState.current_location,
+            goal: a.latestState.goal,
+            affiliation: a.latestState.affiliation,
+            raw_memo: a.latestState.raw_memo,
+          },
+        }));
+    }
+  }
+
+  // 現在シーンのメモ有無(案1: 空シーンからの新規作成を弾く)
   let currentSceneHasMemo = false;
   if (progress?.current_scene_id) {
     const { count } = await supabase
@@ -104,7 +184,16 @@ export default async function BookPage({ params }: Props) {
   const isFinished = progress?.mode === 'finished';
 
   return (
-    <main className="container mx-auto max-w-2xl p-4">
+    <main
+      className={`container mx-auto max-w-2xl p-4${
+        bandPos === 'bottom' ? ' pb-40' : ''
+      }`}
+    >
+      {/* 主要キャラ帯【試作・DP-4判定用】。上部sticky時はここ(フロー先頭)に貼り付く */}
+      {bandCharacters.length > 0 && (
+        <MainCharacterBand characters={bandCharacters} bandPos={bandPos} />
+      )}
+
       {/* パンくず・戻る */}
       <nav className="mb-4">
         <Link href="/" className="text-sm text-blue-600 hover:underline">
@@ -235,6 +324,16 @@ export default async function BookPage({ params }: Props) {
             : 'このシーンにメモを1件追加すると次へ進めます'}
         </p>
       </section>
+
+      {/* 【試作】スクロール確認用の余白。sticky/親指到達を実利用忠実に試すため、
+          本文が短くても必ずスクロールが発生するようにする(合格基準§3運用メモ)。 */}
+      <div
+        aria-hidden
+        className="flex items-start justify-center pt-8 text-xs text-muted-foreground/50"
+        style={{ height: '140vh' }}
+      >
+        （試作: スクロール確認用の余白）
+      </div>
     </main>
   );
 }
