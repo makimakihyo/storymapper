@@ -2,7 +2,8 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 // 未認証でも通すパス(/signin と /auth/* と /signout)
-const PUBLIC_PATH_PREFIXES = ['/signin', '/auth', '/signout']
+// /band-demo は DP-4 判定用の使い捨て公開デモ（本実装では削除する）
+const PUBLIC_PATH_PREFIXES = ['/signin', '/auth', '/signout', '/band-demo']
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATH_PREFIXES.some(
