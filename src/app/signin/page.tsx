@@ -8,7 +8,14 @@ export const metadata: Metadata = {
   description: 'StoryMapper にサインインします。',
 };
 
-type SearchParams = Promise<{ next?: string | string[] }>;
+type SearchParams = Promise<{
+  next?: string | string[];
+  error?: string | string[];
+  detail?: string | string[];
+}>;
+
+const first = (v: string | string[] | undefined): string | undefined =>
+  Array.isArray(v) ? v[0] : v;
 
 export default async function SigninPage({
   searchParams,
@@ -17,6 +24,8 @@ export default async function SigninPage({
 }) {
   const params = await searchParams;
   const next = sanitizeNext(params.next);
+  const authError = first(params.error);
+  const authDetail = first(params.detail);
 
 return (
     <main className="flex flex-1 items-center justify-center bg-zinc-50 px-4 py-16 dark:bg-black">
@@ -55,6 +64,25 @@ return (
               メールアドレスを入力すると、サインイン用のリンクを送信します。
             </p>
           </header>
+
+          {/* 認証コールバック失敗の診断表示（原因を握りつぶさない） */}
+          {authError && (
+            <div
+              role="alert"
+              className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-100"
+            >
+              <p className="font-medium">サインインを完了できませんでした。</p>
+              <p className="mt-1 break-words font-mono text-xs">
+                code: {authError}
+              </p>
+              {authDetail && (
+                <p className="mt-0.5 break-words text-xs text-red-800 dark:text-red-200">
+                  {authDetail}
+                </p>
+              )}
+            </div>
+          )}
+
           <SigninForm next={next} />
         </div>
 
