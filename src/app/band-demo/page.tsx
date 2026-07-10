@@ -1,8 +1,11 @@
 // =====================================================================
-// 主要キャラ帯 DP-4 判定用【認証不要デモ・使い捨て】
+// 主要キャラ帯 DP-4/DP-5 判定用【認証不要デモ・使い捨て】
 // - メール/ログイン不要でタブレット実機からアクセスできる
 // - ?bandPos=top|bottom で上部/下部sticky を切替（本文・スクロール量は読書ページ忠実）
 // - 目的は「縦持ち片手で帯の親指到達性・読書位置の維持」を触ること(DP-4)
+//   ＋「タップ→インライン展開→点灯チップ再タップで閉じる」摩擦の実測(DP-5)
+// - c4 は truncation 実測用に意図的に長名（帯チップは現状 max-width/省略なし）。
+//   件数は top-5 到達テストを兼ねるため5のまま。
 // - 本番採用しない。合格基準: docs/design/main-character-band-acceptance-criteria.md
 // =====================================================================
 
@@ -47,8 +50,12 @@ const MOCK_CHARACTERS: BandCharacter[] = [
     },
   },
   {
+    // truncation実測用の長名モック（謎の組織の男。第3シーンで本名が判明した体）。
+    // 帯チップは現状 truncation なしなので、この名でチップがどこまで横に伸びるか＝
+    // 幅ポリシーが要るかを実機で見る。rank4に長名を置くと rank5(母) が右へ押され
+    // 到達性ストレスも同時に測れる。
     id: 'c4',
-    name: 'リョウ',
+    name: 'リョウ・アレクサンドロフ',
     state: {
       current_location: '不明（目撃情報のみ）',
       goal: '（まだ不明）',
@@ -105,6 +112,18 @@ export default async function BandDemoPage({ searchParams }: Props) {
         </Link>
         <span className="text-gray-400">← タブレット縦持ち・片手で比較</span>
       </nav>
+
+      {/* DP-5 実機チェック項目（本決め前の実測用・使い捨て） */}
+      {bandPos === 'bottom' && (
+        <aside className="mb-4 rounded border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+          <div className="font-semibold">DP-5 実機チェック（下部で）</div>
+          <ol className="mt-1 list-decimal space-y-0.5 pl-4">
+            <li>片手・握り替えなしで「点灯チップ再タップ＝閉じる」が届くか</li>
+            <li>展開カードが現在の読書行を隠すか／隠れても位置が復元できるか</li>
+            <li>長名チップ（リョウ…）が帯で破綻しないか＝幅ポリシー要否</li>
+          </ol>
+        </aside>
+      )}
 
       {/* 書籍情報（読書ページ忠実のダミー） */}
       <header>
