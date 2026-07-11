@@ -31,12 +31,15 @@ type Props = {
 };
 
 // 横スクロールの端フェード（続きがあることを可視化。§3運用メモ）。
-// px-4(16px) の内側パディングと合わせ、端16pxのみ淡くする。
+// チップ列の内側パディング px-5(20px) と合わせ、端20pxのみ淡くする。
+// 左パディングを16→20pxに広げているのは、rank1チップを画面左端に密着させると
+// iPad Safari の左端"戻る"スワイプ領域と競合してタップが取りこぼされるため、
+// 先頭チップをOSエッジゾーンの外へ逃がす狙い（2026-07-11 実機で左端反応不良）。
 const EDGE_FADE = {
   WebkitMaskImage:
-    'linear-gradient(to right, transparent, #000 16px, #000 calc(100% - 16px), transparent)',
+    'linear-gradient(to right, transparent, #000 20px, #000 calc(100% - 20px), transparent)',
   maskImage:
-    'linear-gradient(to right, transparent, #000 16px, #000 calc(100% - 16px), transparent)',
+    'linear-gradient(to right, transparent, #000 20px, #000 calc(100% - 20px), transparent)',
 } as const;
 
 export function MainCharacterBand({ characters }: Props) {
@@ -113,7 +116,7 @@ export function MainCharacterBand({ characters }: Props) {
       {/* チップ: 横スクロール（案C）。初期位置=rank1先頭（先頭要素）。
           名前は truncation しない＝長名はチップが横に伸びる。 */}
       <div
-        className="flex gap-2 overflow-x-auto overscroll-x-contain px-4 py-2"
+        className="flex gap-2 overflow-x-auto overscroll-x-contain px-5 py-2"
         style={EDGE_FADE}
       >
         {characters.map((c) => (
@@ -122,7 +125,7 @@ export function MainCharacterBand({ characters }: Props) {
             type="button"
             onClick={() => setOpenId((v) => (v === c.id ? null : c.id))}
             aria-pressed={openId === c.id}
-            className={`min-h-[44px] shrink-0 whitespace-nowrap rounded-full border px-4 text-sm ${
+            className={`min-h-[44px] shrink-0 touch-manipulation whitespace-nowrap rounded-full border px-4 text-sm ${
               openId === c.id
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-background'
