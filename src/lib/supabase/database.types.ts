@@ -563,6 +563,7 @@ export type Database = {
           id: string | null
           notes: string | null
           observed_in_scene_id: string | null
+          raw_memo: string | null
           scene_id: string | null
           updated_at: string | null
           visual_change: string | null
