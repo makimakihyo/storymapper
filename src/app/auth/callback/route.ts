@@ -1,10 +1,12 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
-// 失敗理由を signin に渡すヘルパ（診断用に本当のエラーを可視化する）
-function backToSignin(origin: string, reason: string, detail?: string | null) {
+// 失敗理由を signin に渡すヘルパ。
+// URL に載せるのは既知の error コードのみ。生のエラー文字列は載せない:
+// 任意文字列を「公式なサインインエラー」に見せかける悪用(フィッシング)や、
+// 認証内部情報の露出を防ぐため。詳細はサーバーログ側で確認する。
+function backToSignin(origin: string, reason: string) {
   const p = new URLSearchParams({ error: reason })
-  if (detail) p.set('detail', detail)
   return NextResponse.redirect(`${origin}/signin?${p.toString()}`)
 }
 
@@ -19,24 +21,29 @@ export async function GET(request: NextRequest) {
   const errorCode = searchParams.get('error_code')
   const errorDescription = searchParams.get('error_description')
   if (providerError || errorCode) {
-    return backToSignin(
-      origin,
-      errorCode ?? providerError ?? 'auth',
-      errorDescription,
-    )
+    // エラーは握りつぶさない。生の詳細はサーバーログにだけ残す。
+    console.error('[auth/callback] provider error', {
+      error: providerError,
+      error_code: errorCode,
+      error_description: errorDescription,
+    })
+    return backToSignin(origin, errorCode ?? providerError ?? 'auth')
   }
 
   if (!code) {
     // code も error も無い = そもそも verify を通っていない/変なアクセス
-    return backToSignin(origin, 'no_code', 'コードが URL にありません')
+    console.error('[auth/callback] missing code in callback URL')
+    return backToSignin(origin, 'no_code')
   }
 
   const supabase = await createClient()
   const { error } = await supabase.auth.exchangeCodeForSession(code)
 
   if (error) {
-    // ここが本命の診断対象: PKCE verifier 欠落なら "code verifier" 系のメッセージが出る
-    return backToSignin(origin, 'exchange_failed', error.message)
+    // 本命の診断対象: PKCE verifier 欠落なら "code verifier" 系のメッセージが出る。
+    // 生メッセージはログにのみ出し、画面には固定文言のみを見せる。
+    console.error('[auth/callback] exchangeCodeForSession failed:', error.message)
+    return backToSignin(origin, 'exchange_failed')
   }
 
   // Open redirect 対策: 同一オリジン相対パスのみ許容
