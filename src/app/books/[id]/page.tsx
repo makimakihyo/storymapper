@@ -6,6 +6,7 @@ import { MemoList } from './memo-list';      // ← 追加
 import { progressScene, regressScene, toggleReadingMode } from './actions';
 import { SubmitButton } from './submit-button';            // 新規
 import { SceneNameEditor } from './scene-name-editor';
+import { MainCharacterBand, type BandCharacter } from './main-character-band';
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -62,7 +63,102 @@ export default async function BookPage({ params }: Props) {
       ? Math.round((currentScenePosition / totalScenes) * 100)
       : 0;
 
-// 現在シーンのメモ有無(案1: 空シーンからの新規作成を弾く)
+// ===== 主要キャラ帯 常時表示（step3 本実装） =====
+  // 表示状態は latest_visible_character_states ビューから取得（ネタバレ＋RLSを
+  //   DB側で担保。DP-7。ビューは raw_memo込み・scene_id付きで再作成済み）。
+  // 順位は「登場頻度順＝可視範囲の記録シーン数」を character_states 集計で算出
+  //   （DP-1/2。同数は直近更新でタイブレーク）。上位5名。
+  // as-of は各表示状態の由来 scene_id → シーン絶対位置N を導出し「シーンN時点」で出す。
+  const currentOrderKey =
+    currentSceneIndex >= 0 ? scenes![currentSceneIndex].order_key : null;
+  let bandCharacters: BandCharacter[] = [];
+  {
+    const { data: chars } = await supabase
+      .from('characters')
+      .select('id, name')
+      .eq('book_id', id);
+
+    if (chars && chars.length > 0) {
+      const charIds = chars.map((c) => c.id);
+      const nameById = new Map(chars.map((c) => [c.id, c.name]));
+
+      // scene_id -> order_key（順位カウントのネタバレフィルタ用）/ 位置N（as-of用）
+      const sceneOrderById = new Map(
+        (scenes ?? []).map((s) => [s.id, s.order_key]),
+      );
+      const scenePositionById = new Map(
+        (scenes ?? []).map((s, i) => [s.id, i + 1]),
+      );
+
+      // (1) 表示状態: ビューからキャラごと最新1件（raw_memo込み・由来scene_id付き）
+      const { data: latestStates } = await supabase
+        .from('latest_visible_character_states')
+        .select(
+          'character_id, scene_id, current_location, goal, affiliation, raw_memo',
+        )
+        .in('character_id', charIds);
+
+      // (2) 順位カウント: 可視範囲の記録シーン数（同数は直近更新でタイブレーク）
+      const rankByChar = new Map<
+        string,
+        { count: number; maxUpdatedAt: string }
+      >();
+      if (currentOrderKey !== null) {
+        const { data: countRows } = await supabase
+          .from('character_states')
+          .select('character_id, scene_id, updated_at')
+          .in('character_id', charIds);
+        for (const r of countRows ?? []) {
+          const ok = sceneOrderById.get(r.scene_id);
+          if (ok === undefined || ok > currentOrderKey) continue; // ネタバレフィルタ
+          const prev = rankByChar.get(r.character_id);
+          if (!prev) {
+            rankByChar.set(r.character_id, {
+              count: 1,
+              maxUpdatedAt: r.updated_at,
+            });
+          } else {
+            prev.count += 1;
+            if (r.updated_at > prev.maxUpdatedAt) prev.maxUpdatedAt = r.updated_at;
+          }
+        }
+      }
+
+      bandCharacters = (latestStates ?? [])
+        // ビュー列は生成型では nullable。character_id が無い行は集計不能なので除外。
+        .filter(
+          (st): st is typeof st & { character_id: string } =>
+            st.character_id !== null,
+        )
+        .map((st) => ({
+          characterId: st.character_id,
+          count: rankByChar.get(st.character_id)?.count ?? 0,
+          maxUpdatedAt: rankByChar.get(st.character_id)?.maxUpdatedAt ?? '',
+          asOfSceneN: st.scene_id
+            ? scenePositionById.get(st.scene_id) ?? null
+            : null,
+          state: {
+            current_location: st.current_location,
+            goal: st.goal,
+            affiliation: st.affiliation,
+            raw_memo: st.raw_memo,
+          },
+        }))
+        .sort(
+          (a, b) =>
+            b.count - a.count || (b.maxUpdatedAt > a.maxUpdatedAt ? 1 : -1),
+        )
+        .slice(0, 5)
+        .map((e) => ({
+          id: e.characterId,
+          name: nameById.get(e.characterId) ?? '(名称不明)',
+          asOfSceneN: e.asOfSceneN,
+          state: e.state,
+        }));
+    }
+  }
+
+  // 現在シーンのメモ有無(案1: 空シーンからの新規作成を弾く)
   let currentSceneHasMemo = false;
   if (progress?.current_scene_id) {
     const { count } = await supabase
@@ -104,7 +200,13 @@ export default async function BookPage({ params }: Props) {
   const isFinished = progress?.mode === 'finished';
 
   return (
-    <main className="container mx-auto max-w-2xl p-4">
+    // pb-28: 下部固定の主要キャラ帯（閉時=ラベル+チップ）に本文末尾が隠れないよう余白を確保
+    <main className="container mx-auto max-w-2xl p-4 pb-28">
+      {/* 主要キャラ帯 常時表示（下部固定）。fixed配置なのでDOM上の位置は不問 */}
+      {bandCharacters.length > 0 && (
+        <MainCharacterBand characters={bandCharacters} />
+      )}
+
       {/* パンくず・戻る */}
       <nav className="mb-4">
         <Link href="/" className="text-sm text-blue-600 hover:underline">
