@@ -1,6 +1,7 @@
 'use server';
 
 import { headers } from 'next/headers';
+import { redirect } from 'next/navigation';
 import { z } from 'zod';
 
 import { createClient } from '@/lib/supabase/server';
@@ -17,6 +18,21 @@ const SignInSchema = z.object({
 export type SignInState =
   | { status: 'idle' }
   | { status: 'sent'; email: string }
+  | { status: 'error'; message: string };
+
+// 6桁OTPコードの検証。リンクを踏まないためGmailのプリフェッチ消費・
+// cookie跨ぎ(PKCE code_verifier欠落)の影響を受けない。
+const VerifyOtpSchema = z.object({
+  email: z.string().trim().email(),
+  token: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/, { message: '6桁の数字コードを入力してください' }),
+  next: z.string().optional(),
+});
+
+export type VerifyOtpState =
+  | { status: 'idle' }
   | { status: 'error'; message: string };
 
 async function resolveOrigin(): Promise<string> {
@@ -65,4 +81,36 @@ export async function signInAction(
   }
 
   return { status: 'sent', email: parsed.data.email };
+}
+
+export async function verifyOtpAction(
+  _prev: VerifyOtpState,
+  formData: FormData,
+): Promise<VerifyOtpState> {
+  const parsed = VerifyOtpSchema.safeParse({
+    email: formData.get('email'),
+    token: formData.get('token'),
+    next: formData.get('next'),
+  });
+  if (!parsed.success) {
+    return {
+      status: 'error',
+      message:
+        parsed.error.issues[0]?.message ?? '6桁の数字コードを入力してください',
+    };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.verifyOtp({
+    email: parsed.data.email,
+    token: parsed.data.token,
+    type: 'email',
+  });
+
+  if (error) {
+    return { status: 'error', message: error.message };
+  }
+
+  // 成功。セッションcookieはserver clientが書き込み済み。目的地へ。
+  redirect(sanitizeNext(parsed.data.next));
 }
