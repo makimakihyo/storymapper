@@ -47,9 +47,8 @@ export function MemoForm({ bookId, currentSceneId }: MemoFormProps) {
       const formData = new FormData();
       formData.set('scene_id', data.scene_id);
       formData.set('body', data.body);
-      if (data.is_bookmark) {
-        formData.set('is_bookmark', 'on');
-      }
+      // N1: 書く入口は自由文の「書き留める」1つに集約。is_bookmark は常に false
+      // （送らない＝createMemo 側で false 相当）。しおりは N2（独立ボタン）が引き取る。
 
       const result = await createMemo(bookId, formData);
       if (result?.error) {
@@ -66,13 +65,13 @@ export function MemoForm({ bookId, currentSceneId }: MemoFormProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>メモを追加</Button>
+        <Button>書き留める</Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>メモを追加</DialogTitle>
+          <DialogTitle>書き留める</DialogTitle>
           <DialogDescription>
-            現在のシーンにメモまたはブックマークを追加します。
+            現在のシーンに覚書を書き留めます。
           </DialogDescription>
         </DialogHeader>
 
@@ -80,30 +79,17 @@ export function MemoForm({ bookId, currentSceneId }: MemoFormProps) {
           <input type="hidden" {...register('scene_id')} />
 
           <div>
-            <Label htmlFor="body">本文</Label>
+            <Label htmlFor="body">覚書</Label>
             <textarea
               id="body"
               {...register('body')}
               className="mt-1 w-full rounded border p-2 min-h-[120px] text-sm"
-              placeholder="メモを書く..."
+              placeholder="気づいたことを書き留める..."
               disabled={isPending}
             />
             {errors.body && (
               <p className="mt-1 text-sm text-red-600">{errors.body.message}</p>
             )}
-          </div>
-
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="is_bookmark"
-              {...register('is_bookmark')}
-              disabled={isPending}
-              className="h-4 w-4"
-            />
-            <Label htmlFor="is_bookmark" className="cursor-pointer">
-              これをブックマークにする
-            </Label>
           </div>
 
           {formError && (
