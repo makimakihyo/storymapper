@@ -298,14 +298,16 @@ export default async function BookPage({ params }: Props) {
         </section>
       )}
 
-      {/* 登場人物への導線(旧 POVキャラ枠を置換) */}
+      {/* 登場人物への参照(read)導線。
+          N1: 書く導線は「書き留める」1入口に集約し、能動的な"書く"は後段 N3「送る」へ寄せる。
+          ここはラベルを参照専用に後退させる（リンク先・機能は不変、表示のみ後退）。 */}
       <section className="mt-4">
         <Link
           href={`/books/${book.id}/characters`}
           className="flex items-center justify-between rounded border p-4 hover:bg-gray-50"
         >
           <span className="font-medium">登場人物</span>
-          <span className="text-sm text-gray-500">一覧・状態を記録 →</span>
+          <span className="text-sm text-gray-500">一覧・状態を確認 →</span>
         </Link>
       </section>
 
