@@ -294,6 +294,7 @@ export function CharacterItem({
               characterId={character.id}
               currentSceneId={currentSceneId}
               initial={currentState}
+              sceneN={currentScenePosition > 0 ? currentScenePosition : null}
               onSaved={() => setIsRecording(false)}
               onCancel={() => setIsRecording(false)}
             />
