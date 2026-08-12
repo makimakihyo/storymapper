@@ -294,6 +294,7 @@ export default async function BookPage({ params }: Props) {
           <MemoList
             bookId={book.id}
             currentSceneId={progress.current_scene_id}
+            currentSceneN={currentScenePosition}
           />
         </section>
       )}

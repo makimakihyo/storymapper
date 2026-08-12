@@ -28,6 +28,9 @@ type Props = {
   characterId: string;
   currentSceneId: string | null;
   initial: CharacterStatePrefill | null;
+  // 記録先シーンの絶対位置N（§9 上書き文言の "シーンN" 表記に使う）。
+  // 現在シーン=N4復帰で覚書の scene_id と食い違い得るため「現在シーン」でなく必ず絶対N。
+  sceneN?: number | null;
   onSaved?: () => void;
   onCancel?: () => void;
 };
@@ -37,6 +40,7 @@ export function CharacterStateForm({
   characterId,
   currentSceneId,
   initial,
+  sceneN,
   onSaved,
   onCancel,
 }: Props) {
@@ -62,6 +66,9 @@ export function CharacterStateForm({
       affiliation: initial?.affiliation ?? '',
     },
   });
+
+  // §9 上書き認知: 記録先シーンに既存 state があるか（initial の有無で判定）。
+  const isOverwrite = initial != null;
 
   // 現在シーンが無い（本を開いていない/シーン未作成）なら記録不可。
   if (!currentSceneId) {
@@ -129,6 +136,16 @@ export function CharacterStateForm({
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-3" noValidate>
+      {/* §9 上書き認知: 記録先シーン(絶対N)に既存があるかを一行で明示。
+          prefill だけでは「上書き」が伝わらないため派生テキストで補う（正本＝ハンドオフ§9）。 */}
+      {sceneN != null && (
+        <p className="text-xs text-muted-foreground">
+          {isOverwrite
+            ? `このシーン（${sceneN}）には既に記録があります。保存すると内容を置き換えます。`
+            : `シーン${sceneN}の初回記録です`}
+        </p>
+      )}
+
       {/* 自由文メモ（canonical）＋ 抽出ボタン */}
       <div className="space-y-1">
         <Label htmlFor={`memo-${characterId}`}>状態メモ（自由文）</Label>
@@ -215,7 +232,13 @@ export function CharacterStateForm({
 
       <div className="flex gap-2">
         <Button type="submit" disabled={isPending || isExtracting}>
-          {isPending ? '記録中…' : '現在シーンで記録'}
+          {isPending
+            ? isOverwrite
+              ? '上書き中…'
+              : '記録中…'
+            : isOverwrite
+              ? '上書きする'
+              : '記録する'}
         </Button>
         {onCancel && (
           <Button
